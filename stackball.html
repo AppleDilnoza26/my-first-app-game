@@ -1,0 +1,1144 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <meta name="description" content="3D экшн-аркада Stack Ball, созданная с использованием Three.js, с эффектами разрушения, комбо-режимом и звуковым синтезом.">
+  <title>Stack Ball 3D Space Edition</title>
+  
+  <!-- Современные шрифты -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;700;900&family=Space+Grotesk:wght@700&display=swap" rel="stylesheet">
+
+  <!-- Скрипт Three.js -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+
+  <style>
+    :root {
+      --bg-color: #030308;
+      --card-bg: rgba(255, 255, 255, 0.03);
+      --card-border: rgba(255, 255, 255, 0.08);
+      --text-main: #ffffff;
+      --text-muted: #8b8e9f;
+      --fever-color: linear-gradient(90deg, #ff0055, #ffaa00);
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      user-select: none;
+      -webkit-user-drag: none;
+    }
+
+    html, body {
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      background-color: var(--bg-color);
+      font-family: 'Outfit', sans-serif;
+      color: var(--text-main);
+      touch-action: none; /* Запрещает системные жесты скролла */
+    }
+
+    /* Холст рендерера Three.js */
+    canvas#game-canvas {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      z-index: 1;
+    }
+
+    /* Интерфейс поверх игры (Glassmorphic) */
+    .ui-overlay {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      z-index: 10;
+      pointer-events: none;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      padding: 30px;
+    }
+
+    .ui-element {
+      pointer-events: auto;
+    }
+
+    /* Шапка счета */
+    .header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      width: 100%;
+      max-width: 400px;
+      margin: 0 auto;
+    }
+
+    .score-container {
+      background: var(--card-bg);
+      border: 1px solid var(--card-border);
+      backdrop-filter: blur(10px);
+      -webkit-backdrop-filter: blur(10px);
+      padding: 10px 20px;
+      border-radius: 16px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      box-shadow: 0 10px 25px rgba(0, 0, 0, 0.4);
+    }
+
+    .score-label {
+      font-size: 0.75rem;
+      text-transform: uppercase;
+      color: var(--text-muted);
+      font-weight: 700;
+      letter-spacing: 1px;
+    }
+
+    .score-value {
+      font-family: 'Space Grotesk', sans-serif;
+      font-size: 1.6rem;
+      font-weight: 700;
+    }
+
+    .level-badge {
+      background: linear-gradient(135deg, #00f0ff, #7f00ff);
+      color: #fff;
+      font-weight: 900;
+      padding: 10px 20px;
+      border-radius: 16px;
+      font-size: 1rem;
+      box-shadow: 0 10px 25px rgba(0, 240, 255, 0.25);
+    }
+
+    /* Прогресс-бар Fever Mode */
+    .fever-container {
+      width: 100%;
+      max-width: 280px;
+      margin: 0 auto;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .fever-label {
+      font-size: 0.75rem;
+      font-weight: 900;
+      letter-spacing: 1.5px;
+      color: #ffaa00;
+      text-transform: uppercase;
+      opacity: 0.8;
+      transition: opacity 0.3s;
+    }
+
+    .fever-label.active {
+      animation: pulse-text 0.5s infinite alternate;
+      color: #ff0055;
+    }
+
+    @keyframes pulse-text {
+      0% { transform: scale(1); filter: drop-shadow(0 0 2px #ff0055); }
+      100% { transform: scale(1.1); filter: drop-shadow(0 0 10px #ffea00); }
+    }
+
+    .fever-bar-wrap {
+      width: 100%;
+      height: 12px;
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      border-radius: 6px;
+      overflow: hidden;
+      box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.5);
+    }
+
+    .fever-bar-fill {
+      width: 0%;
+      height: 100%;
+      background: var(--fever-color);
+      box-shadow: 0 0 8px #ffaa00;
+      transition: width 0.1s linear;
+    }
+
+    /* Экраны меню (Старт, Проигрыш, Победа) */
+    .menu-screen {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      z-index: 20;
+      background: rgba(4, 4, 10, 0.8);
+      backdrop-filter: blur(15px);
+      -webkit-backdrop-filter: blur(15px);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 30px;
+      text-align: center;
+      transition: opacity 0.3s ease;
+    }
+
+    .menu-card {
+      background: var(--card-bg);
+      border: 1px solid var(--card-border);
+      border-radius: 28px;
+      padding: 40px 30px;
+      width: 90%;
+      max-width: 380px;
+      box-shadow: 0 30px 60px rgba(0, 0, 0, 0.6);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+
+    h2 {
+      font-size: 2.2rem;
+      font-weight: 900;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      background: linear-gradient(135deg, #00f0ff, #7f00ff);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      margin-bottom: 12px;
+    }
+
+    .menu-card.danger h2 {
+      background: linear-gradient(135deg, #ff0055, #ffaa00);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+
+    p.subtitle {
+      color: var(--text-muted);
+      font-size: 0.95rem;
+      margin-bottom: 25px;
+      line-height: 1.5;
+    }
+
+    .btn-action {
+      background: linear-gradient(135deg, #00f0ff, #7f00ff);
+      color: #fff;
+      border: none;
+      border-radius: 16px;
+      padding: 16px 36px;
+      font-size: 1.1rem;
+      font-weight: 700;
+      cursor: pointer;
+      font-family: 'Outfit', sans-serif;
+      box-shadow: 0 10px 25px rgba(0, 240, 255, 0.3);
+      transition: all 0.2s ease;
+      width: 100%;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+    }
+
+    .btn-action:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 12px 30px rgba(0, 240, 255, 0.5);
+    }
+    
+    .btn-action:active {
+      transform: translateY(1px);
+    }
+
+    .hidden {
+      opacity: 0;
+      pointer-events: none !important;
+    }
+
+    .hide-display {
+      display: none !important;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Холст для Three.js рендерера -->
+  <canvas id="game-canvas"></canvas>
+
+  <!-- Игровой оверлей UI -->
+  <div class="ui-overlay">
+    <!-- Шапка счета -->
+    <div class="header ui-element">
+      <div class="score-container">
+        <span class="score-label">Счет</span>
+        <span id="current-score" class="score-value">0</span>
+      </div>
+      <div id="level-badge" class="level-badge">Ур. 1</div>
+    </div>
+
+    <!-- Fever бар -->
+    <div class="fever-container ui-element">
+      <span id="fever-label" class="fever-label">Fever Mode</span>
+      <div class="fever-bar-wrap">
+        <div id="fever-bar-fill" class="fever-bar-fill"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Экран СТАРТА -->
+  <div id="start-screen" class="menu-screen">
+    <div class="menu-card">
+      <h2>Stack Ball</h2>
+      <p class="subtitle">Удерживайте нажатие мыши или пальца на экране, чтобы пробивать платформы. Проходить можно ТОЛЬКО сквозь ЧЕРНЫЕ сектора! Цветные сектора разобьют мяч!</p>
+      <button id="btn-start" class="btn-action">Начать игру</button>
+    </div>
+  </div>
+
+  <!-- Экран GAME OVER -->
+  <div id="gameover-screen" class="menu-screen hide-display">
+    <div class="menu-card danger">
+      <h2>Вы Разбились!</h2>
+      <p class="subtitle">Вы задели цветной сектор платформы.</p>
+      <button id="btn-retry" class="btn-action">Попробовать снова</button>
+    </div>
+  </div>
+
+  <!-- Экран ПОБЕДЫ -->
+  <div id="win-screen" class="menu-screen hide-display">
+    <div class="menu-card">
+      <h2>Уровень Пройден</h2>
+      <p class="subtitle">Отличная работа! Готовы к следующему уровню?</p>
+      <button id="btn-next" class="btn-action">Следующий уровень</button>
+    </div>
+  </div>
+
+  <script>
+    // --- Константы игры ---
+    const Y_GAP = 1.3;
+    const BALL_RADIUS = 0.26;
+    const BOUNCE_FORCE = 0.15;
+    const GRAVITY = 0.009;
+    const SMASH_SPEED = -0.28;
+    const ROTATION_SPEED_BASE = 0.015;
+
+    // --- Состояния игры ---
+    const STATE_START = 0;
+    const STATE_PLAYING = 1;
+    const STATE_GAMEOVER = 2;
+    const STATE_WIN = 3;
+
+    let gameState = STATE_START;
+
+    // --- Переменные игры ---
+    let score = 0;
+    let level = 1;
+    let isHolding = false;
+    let isFeverMode = false;
+    let feverMeter = 0; // 0 - 100
+    let feverTimer = 0; // Время действия Fever
+    
+    let platforms = []; // Хранит группы платформ
+    let debris = []; // Осколки для анимации взрыва
+    let nextPlatformToSmash = 0;
+    let levelPlatformsCount = 35; // Количество платформ в уровне
+    let levelHue = 0.0; // Базовый цвет платформ (HSL Hue)
+
+    let velocityY = 0;
+    let ballY = 2.0;
+
+    // --- Переменные Web Audio API ---
+    let audioCtx = null;
+
+    // --- Переменные Three.js ---
+    let scene, camera, renderer;
+    let ball, centralColumn;
+    let dirLight;
+
+    // --- Инициализация Three.js сцены ---
+    function initEngine() {
+      const canvas = document.getElementById('game-canvas');
+      
+      // Создаем сцену
+      scene = new THREE.Scene();
+      scene.background = new THREE.Color(0x040409);
+      scene.fog = new THREE.FogExp2(0x040409, 0.04);
+
+      // Камера
+      camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 100);
+      camera.position.set(0, 5, 10);
+      camera.lookAt(0, 0, 0);
+
+      // Рендерер
+      renderer = new THREE.WebGLRenderer({ canvas: canvas, antialias: true });
+      renderer.setSize(window.innerWidth, window.innerHeight);
+      renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+      renderer.shadowMap.enabled = true;
+      renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+
+      // Освещение
+      const ambientLight = new THREE.AmbientLight(0xffffff, 0.55);
+      scene.add(ambientLight);
+
+      dirLight = new THREE.DirectionalLight(0xffffff, 0.85);
+      dirLight.position.set(5, 20, 7);
+      dirLight.castShadow = true;
+      dirLight.shadow.mapSize.width = 1024;
+      dirLight.shadow.mapSize.height = 1024;
+      dirLight.shadow.camera.near = 0.5;
+      dirLight.shadow.camera.far = 40;
+      dirLight.shadow.camera.left = -6;
+      dirLight.shadow.camera.right = 6;
+      dirLight.shadow.camera.top = 6;
+      dirLight.shadow.camera.bottom = -6;
+      scene.add(dirLight);
+
+      // Дополнительный мягкий заполняющий свет снизу
+      const fillLight = new THREE.DirectionalLight(0x7f00ff, 0.25);
+      fillLight.position.set(-5, -10, -5);
+      scene.add(fillLight);
+
+      // Слушатель изменения размеров экрана
+      window.addEventListener('resize', onWindowResize);
+    }
+
+    function onWindowResize() {
+      camera.aspect = window.innerWidth / window.innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(window.innerWidth, window.innerHeight);
+    }
+
+    // --- Звуковой движок (Web Audio API) ---
+    function initAudio() {
+      if (!audioCtx) {
+        audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+      }
+      if (audioCtx.state === 'suspended') {
+        audioCtx.resume();
+      }
+    }
+
+    function playBounceSound() {
+      try {
+        initAudio();
+        const osc = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+        osc.connect(gain);
+        gain.connect(audioCtx.destination);
+        
+        osc.type = 'triangle';
+        osc.frequency.setValueAtTime(140, audioCtx.currentTime);
+        osc.frequency.exponentialRampToValueAtTime(70, audioCtx.currentTime + 0.1);
+        
+        gain.gain.setValueAtTime(0.08, audioCtx.currentTime);
+        gain.gain.linearRampToValueAtTime(0.001, audioCtx.currentTime + 0.1);
+        
+        osc.start();
+        osc.stop(audioCtx.currentTime + 0.1);
+      } catch (e) {}
+    }
+
+    function playSmashSound() {
+      try {
+        initAudio();
+        const now = audioCtx.currentTime;
+        
+        // Генерация шума для эффекта ломающегося пластика
+        const bufferSize = audioCtx.sampleRate * 0.08;
+        const buffer = audioCtx.createBuffer(1, bufferSize, audioCtx.sampleRate);
+        const data = buffer.getChannelData(0);
+        for (let i = 0; i < bufferSize; i++) {
+          data[i] = Math.random() * 2 - 1;
+        }
+        
+        const noise = audioCtx.createBufferSource();
+        noise.buffer = buffer;
+        
+        const filter = audioCtx.createBiquadFilter();
+        filter.type = 'bandpass';
+        filter.frequency.setValueAtTime(900, now);
+        filter.frequency.exponentialRampToValueAtTime(150, now + 0.08);
+        
+        const gain = audioCtx.createGain();
+        gain.gain.setValueAtTime(0.12, now);
+        gain.gain.exponentialRampToValueAtTime(0.001, now + 0.08);
+        
+        noise.connect(filter);
+        filter.connect(gain);
+        gain.connect(audioCtx.destination);
+        noise.start(now);
+        
+        // Добавляем низкочастотный пиковый клик
+        const osc = audioCtx.createOscillator();
+        const oscGain = audioCtx.createGain();
+        osc.connect(oscGain);
+        oscGain.connect(audioCtx.destination);
+        osc.type = 'triangle';
+        osc.frequency.setValueAtTime(180, now);
+        osc.frequency.exponentialRampToValueAtTime(60, now + 0.08);
+        oscGain.gain.setValueAtTime(0.08, now);
+        oscGain.gain.exponentialRampToValueAtTime(0.001, now + 0.08);
+        osc.start(now);
+        osc.stop(now + 0.08);
+      } catch (e) {}
+    }
+
+    function playFeverSmashSound() {
+      try {
+        initAudio();
+        const now = audioCtx.currentTime;
+        
+        const osc = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+        osc.connect(gain);
+        gain.connect(audioCtx.destination);
+        
+        osc.type = 'sawtooth';
+        osc.frequency.setValueAtTime(250, now);
+        osc.frequency.linearRampToValueAtTime(50, now + 0.12);
+        
+        gain.gain.setValueAtTime(0.15, now);
+        gain.gain.linearRampToValueAtTime(0.001, now + 0.12);
+        
+        osc.start();
+        osc.stop(now + 0.12);
+      } catch (e) {}
+    }
+
+    function playCrashSound() {
+      try {
+        initAudio();
+        const now = audioCtx.currentTime;
+        
+        // Низкочастотный взрывной удар
+        const osc = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+        osc.connect(gain);
+        gain.connect(audioCtx.destination);
+        
+        osc.type = 'sawtooth';
+        osc.frequency.setValueAtTime(120, now);
+        osc.frequency.linearRampToValueAtTime(20, now + 0.35);
+        
+        gain.gain.setValueAtTime(0.2, now);
+        gain.gain.linearRampToValueAtTime(0.001, now + 0.35);
+        
+        osc.start();
+        osc.stop(now + 0.35);
+      } catch (e) {}
+    }
+
+    function playWinSound() {
+      try {
+        initAudio();
+        const now = audioCtx.currentTime;
+        const melody = [261.63, 329.63, 392.00, 523.25, 659.25];
+        melody.forEach((freq, idx) => {
+          const osc = audioCtx.createOscillator();
+          const gain = audioCtx.createGain();
+          osc.connect(gain);
+          gain.connect(audioCtx.destination);
+          
+          osc.type = 'sine';
+          osc.frequency.setValueAtTime(freq, now + idx * 0.1);
+          gain.gain.setValueAtTime(0.08, now + idx * 0.1);
+          gain.gain.exponentialRampToValueAtTime(0.001, now + idx * 0.1 + 0.25);
+          
+          osc.start(now + idx * 0.1);
+          osc.stop(now + idx * 0.1 + 0.25);
+        });
+      } catch (e) {}
+    }
+
+    // --- Математическая генерация 3D контура кольцевого сегмента ---
+    function createRingSegmentShape(innerRadius, outerRadius, startAngle, angleLength) {
+      const shape = new THREE.Shape();
+      const endAngle = startAngle + angleLength;
+      
+      // Направляемся к старту внутренней дуги
+      shape.moveTo(Math.cos(startAngle) * innerRadius, Math.sin(startAngle) * innerRadius);
+      // Линия к внешнему старту
+      shape.lineTo(Math.cos(startAngle) * outerRadius, Math.sin(startAngle) * outerRadius);
+      // Внешняя дуга
+      shape.absarc(0, 0, outerRadius, startAngle, endAngle, false);
+      // Линия к внутреннему финишу
+      shape.lineTo(Math.cos(endAngle) * innerRadius, Math.sin(endAngle) * innerRadius);
+      // Внутренняя дуга обратно
+      shape.absarc(0, 0, innerRadius, endAngle, startAngle, true);
+      
+      return shape;
+    }
+
+    // --- Создание одной платформы (группы 3D секторов) ---
+    function createPlatform(y, colorHue, isBottom = false) {
+      const group = new THREE.Group();
+      group.position.y = y;
+      
+      const numSegments = 8;
+      const angleLength = (Math.PI * 2) / numSegments;
+      const innerRadius = 1.6;
+      const outerRadius = 3.2;
+      
+      const safeColor = new THREE.Color().setHSL(colorHue, 0.95, 0.5);
+      const dangerColor = new THREE.Color(0x131317);
+      
+      const extrudeSettings = {
+        depth: 0.38,
+        bevelEnabled: true,
+        bevelSegments: 2,
+        steps: 1,
+        bevelSize: 0.04,
+        bevelThickness: 0.04
+      };
+
+      // Определяем сектор опасных платформ для этого уровня
+      // С ростом уровня увеличивается плотность опасных секторов
+      const dangerChance = Math.min(0.4, 0.18 + level * 0.02);
+
+      for (let i = 0; i < numSegments; i++) {
+        const startAngle = i * angleLength;
+        let isDanger = false;
+        
+        if (!isBottom) {
+          // Bottom (финишная) платформа не содержит опасных секторов
+          // Делаем чередующиеся или случайные опасные сектора
+          isDanger = (Math.random() < dangerChance);
+        }
+
+        const shape = createRingSegmentShape(innerRadius, outerRadius, startAngle, angleLength);
+        const geometry = new THREE.ExtrudeGeometry(shape, extrudeSettings);
+        
+        // Разворачиваем геометрию так, чтобы плоскость выдавливания лежала по Y
+        geometry.rotateX(-Math.PI / 2);
+        
+        const material = new THREE.MeshStandardMaterial({
+          color: isDanger ? dangerColor : safeColor,
+          roughness: 0.15,
+          metalness: 0.1,
+          transparent: true,
+          opacity: 1.0
+        });
+
+        // Настройки золотого цвета для финиша
+        if (isBottom) {
+          material.color.setHex(0xffd700);
+          material.metalness = 0.85;
+          material.roughness = 0.08;
+        }
+
+        const mesh = new THREE.Mesh(geometry, material);
+        mesh.castShadow = true;
+        mesh.receiveShadow = true;
+        
+        // Сохраняем метаданные сегмента
+        mesh.userData = {
+          isDanger: isDanger,
+          startAngle: startAngle,
+          angleLength: angleLength,
+          color: isDanger ? dangerColor : safeColor,
+          isBottom: isBottom
+        };
+
+        group.add(mesh);
+      }
+
+      // Случайное смещение угла поворота всей платформы
+      group.rotation.y = Math.random() * Math.PI * 2;
+      
+      return group;
+    }
+
+    // --- Сборка игрового уровня ---
+    function buildLevel() {
+      // Очищаем старые объекты
+      platforms.forEach(p => { if (p) scene.remove(p); });
+      platforms = [];
+      debris.forEach(d => scene.remove(d));
+      debris = [];
+
+      if (ball) scene.remove(ball);
+      if (centralColumn) scene.remove(centralColumn);
+
+      // Рассчитываем параметры уровня
+      levelPlatformsCount = 30 + level * 5;
+      levelHue = (level * 0.38) % 1.0;
+      nextPlatformToSmash = 0;
+      feverMeter = 0;
+      isFeverMode = false;
+      isHolding = false;
+      updateFeverBar();
+
+      // Создаем центральную колонну
+      const colHeight = levelPlatformsCount * Y_GAP + 15;
+      const colGeo = new THREE.CylinderGeometry(1.5, 1.5, colHeight, 20);
+      const colMat = new THREE.MeshStandardMaterial({
+        color: 0x1d1d25,
+        roughness: 0.8,
+        metalness: 0.2
+      });
+      centralColumn = new THREE.Mesh(colGeo, colMat);
+      centralColumn.position.y = -colHeight / 2 + 5;
+      centralColumn.receiveShadow = true;
+      scene.add(centralColumn);
+
+      // Создаем стек платформ
+      for (let i = 0; i < levelPlatformsCount; i++) {
+        const y = -i * Y_GAP;
+        const platform = createPlatform(y, levelHue, false);
+        scene.add(platform);
+        platforms.push(platform);
+      }
+
+      // Создаем золотую финишную платформу
+      const winY = -levelPlatformsCount * Y_GAP;
+      const winPlatform = createPlatform(winY, 0, true);
+      scene.add(winPlatform);
+      platforms.push(winPlatform);
+
+      // Создаем мяч
+      const ballGeo = new THREE.SphereGeometry(BALL_RADIUS, 18, 18);
+      const ballMat = new THREE.MeshStandardMaterial({
+        color: 0xffffff,
+        roughness: 0.1,
+        metalness: 0.1
+      });
+      ball = new THREE.Mesh(ballGeo, ballMat);
+      ball.position.set(0, 2.0, 2.4); // смещение 2.4 - центр кольца сегмента
+      ball.castShadow = true;
+      scene.add(ball);
+
+      ballY = 2.0;
+      velocityY = 0;
+
+      // Обновляем бадж
+      document.getElementById('level-badge').textContent = `Ур. ${level}`;
+      
+      // Сброс камеры
+      camera.position.set(0, ballY + 4, 9);
+    }
+
+    // --- Обработка столкновения мяча с сегментом ---
+    function checkCollision(platform) {
+      // Мяч летит по траектории Z = 2.4, X = 0 (это угол Math.PI/2)
+      // Рассчитываем локальный угол контакта относительно вращения платформы
+      let localAngle = (Math.PI / 2) - platform.rotation.y;
+      
+      // Нормализуем в диапазон [0, 2*PI)
+      localAngle = localAngle % (Math.PI * 2);
+      if (localAngle < 0) localAngle += Math.PI * 2;
+
+      let isDanger = false;
+      let isBottom = false;
+
+      platform.children.forEach(child => {
+        const start = child.userData.startAngle;
+        const len = child.userData.angleLength;
+        const end = start + len;
+
+        if (end > Math.PI * 2) {
+          // Охватывает границу 0 радиан
+          if (localAngle >= start || localAngle <= (end % (Math.PI * 2))) {
+            isDanger = child.userData.isDanger;
+            isBottom = child.userData.isBottom;
+          }
+        } else {
+          if (localAngle >= start && localAngle <= end) {
+            isDanger = child.userData.isDanger;
+            isBottom = child.userData.isBottom;
+          }
+        }
+      });
+
+      return { isDanger, isBottom };
+    }
+
+    // --- Эффект взрывного разрушения платформы ---
+    function smashPlatform(idx) {
+      const platform = platforms[idx];
+      if (!platform) return;
+
+      // Убираем из активного списка
+      platforms[idx] = null;
+
+      // Проверяем, на что именно налетел мяч
+      const { isDanger, isBottom } = checkCollision(platform);
+
+      // Столкновение с опасным сектором (теперь опасным является цветной сектор, т.е. !isDanger)
+      if (!isDanger && !isBottom && !isFeverMode) {
+        gameOver();
+        return;
+      }
+
+      // Победное столкновение
+      if (isBottom) {
+        winGame();
+        return;
+      }
+
+      // Начисление очков
+      score++;
+      document.getElementById('current-score').textContent = score;
+
+      // Обработка Fever шкалы
+      if (!isFeverMode) {
+        feverMeter = Math.min(100, feverMeter + 3.5);
+        updateFeverBar();
+        if (feverMeter >= 100) {
+          activateFeverMode();
+        }
+      }
+
+      // Звук удара
+      if (isFeverMode) {
+        playFeverSmashSound();
+      } else {
+        playSmashSound();
+      }
+
+      // Эффект разлетающихся осколков
+      const segments = [...platform.children];
+      segments.forEach(segment => {
+        // Получаем мировые координаты и ротацию перед отсоединением
+        const worldPos = new THREE.Vector3();
+        segment.getWorldPosition(worldPos);
+
+        const worldRot = new THREE.Euler();
+        worldRot.copy(segment.rotation);
+        worldRot.y += platform.rotation.y;
+
+        scene.add(segment);
+        segment.position.copy(worldPos);
+        segment.rotation.copy(worldRot);
+
+        // Рассчитываем силу разлета от центра
+        const angle = segment.userData.startAngle + segment.userData.angleLength / 2 + platform.rotation.y;
+        const pushForce = Math.random() * 5 + 6;
+
+        segment.userData.vx = Math.cos(angle) * pushForce;
+        segment.userData.vy = Math.random() * 3 + 3; // полет вверх
+        segment.userData.vz = Math.sin(angle) * pushForce;
+
+        segment.userData.vrx = (Math.random() - 0.5) * 8;
+        segment.userData.vry = (Math.random() - 0.5) * 8;
+        segment.userData.vrz = (Math.random() - 0.5) * 8;
+
+        // Создаем индивидуальный материал с прозрачностью для фейда
+        segment.material = segment.material.clone();
+        segment.material.transparent = true;
+        segment.material.opacity = 1.0;
+
+        debris.push(segment);
+      });
+
+      // Удаляем пустую группу из сцены
+      scene.remove(platform);
+
+      // Генерируем вспышки искр под мячом
+      createSparks(ball.position.x, ball.position.y - BALL_RADIUS, ball.position.z);
+    }
+
+    // --- Генерация мелких искр ---
+    function createSparks(x, y, z) {
+      const count = 6;
+      const sparkGeo = new THREE.BoxGeometry(0.06, 0.06, 0.06);
+      const color = isFeverMode ? 0xffea00 : new THREE.Color().setHSL(levelHue, 0.9, 0.6);
+
+      for (let i = 0; i < count; i++) {
+        const mat = new THREE.MeshBasicMaterial({ color: color, transparent: true, opacity: 1.0 });
+        const mesh = new THREE.Mesh(sparkGeo, mat);
+        mesh.position.set(x, y, z);
+
+        mesh.userData.vx = (Math.random() - 0.5) * 4;
+        mesh.userData.vy = Math.random() * 3 + 2;
+        mesh.userData.vz = (Math.random() - 0.5) * 4;
+
+        scene.add(mesh);
+        debris.push(mesh);
+      }
+    }
+
+    // --- Разрушение мяча при проигрыше ---
+    function shatterBall() {
+      ball.visible = false;
+      const shardCount = 14;
+      const shardGeo = new THREE.SphereGeometry(0.07, 4, 4);
+      const color = isFeverMode ? 0xffaa00 : 0xff2222;
+
+      for (let i = 0; i < shardCount; i++) {
+        const mat = new THREE.MeshBasicMaterial({ color: color, transparent: true, opacity: 1.0 });
+        const mesh = new THREE.Mesh(shardGeo, mat);
+        mesh.position.copy(ball.position);
+
+        mesh.userData.vx = (Math.random() - 0.5) * 6;
+        mesh.userData.vy = Math.random() * 5 + 3;
+        mesh.userData.vz = (Math.random() - 0.5) * 6;
+        
+        mesh.userData.vrx = Math.random() * 8;
+        mesh.userData.vry = Math.random() * 8;
+        mesh.userData.vrz = Math.random() * 8;
+
+        scene.add(mesh);
+        debris.push(mesh);
+      }
+    }
+
+    // --- Fever Mode ---
+    function activateFeverMode() {
+      isFeverMode = true;
+      feverTimer = 3.5; // Время действия режима (в секундах)
+      document.getElementById('fever-label').classList.add('active');
+      
+      // Анимация огненного свечения мяча
+      ball.material.emissive.setHex(0xff3300);
+      ball.material.color.setHex(0xffaa00);
+    }
+
+    function deactivateFeverMode() {
+      isFeverMode = false;
+      feverMeter = 0;
+      updateFeverBar();
+      document.getElementById('fever-label').classList.remove('active');
+      
+      // Сброс материала мяча
+      ball.material.emissive.setHex(0x000000);
+      ball.material.color.setHex(0xffffff);
+    }
+
+    function updateFeverBar() {
+      const bar = document.getElementById('fever-bar-fill');
+      bar.style.width = `${feverMeter}%`;
+    }
+
+    // --- Анимация осколков ---
+    function updateDebris(dt) {
+      for (let i = debris.length - 1; i >= 0; i--) {
+        const item = debris[i];
+
+        item.position.x += item.userData.vx * dt;
+        item.position.y += item.userData.vy * dt;
+        item.position.z += item.userData.vz * dt;
+
+        // Гравитация
+        item.userData.vy -= 9.8 * dt;
+
+        if (item.userData.vrx) item.rotation.x += item.userData.vrx * dt;
+        if (item.userData.vry) item.rotation.y += item.userData.vry * dt;
+        if (item.userData.vrz) item.rotation.z += item.userData.vrz * dt;
+
+        // Угасание прозрачности
+        item.material.opacity -= 1.8 * dt;
+
+        if (item.material.opacity <= 0) {
+          scene.remove(item);
+          item.geometry.dispose();
+          item.material.dispose();
+          debris.splice(i, 1);
+        }
+      }
+    }
+
+    // --- Game Over ---
+    function gameOver() {
+      gameState = STATE_GAMEOVER;
+      isHolding = false;
+      shatterBall();
+      playCrashSound();
+
+      setTimeout(() => {
+        document.getElementById('gameover-screen').classList.remove('hide-display');
+      }, 500);
+    }
+
+    // --- Победа ---
+    function winGame() {
+      gameState = STATE_WIN;
+      isHolding = false;
+      playWinSound();
+      
+      // Вспышка фейерверков под мячом
+      for (let i = 0; i < 4; i++) {
+        setTimeout(() => {
+          createSparks(0, -levelPlatformsCount * Y_GAP + BALL_RADIUS, 2.4);
+        }, i * 150);
+      }
+
+      setTimeout(() => {
+        document.getElementById('win-screen').classList.remove('hide-display');
+      }, 800);
+    }
+
+    // --- Рестарт ---
+    function restartLevel(next = false) {
+      if (next) {
+        level++;
+      } else {
+        score = 0;
+        document.getElementById('current-score').textContent = score;
+      }
+
+      // Скрываем все экраны меню
+      document.getElementById('start-screen').classList.add('hidden');
+      document.getElementById('gameover-screen').classList.add('hide-display');
+      document.getElementById('win-screen').classList.add('hide-display');
+
+      buildLevel();
+      gameState = STATE_PLAYING;
+    }
+
+    // --- Игровой цикл рендеринга ---
+    let lastTime = performance.now();
+
+    function animate() {
+      requestAnimationFrame(animate);
+
+      const currentTime = performance.now();
+      const dt = Math.min((currentTime - lastTime) / 1000, 0.1); // защита от лагов
+      lastTime = currentTime;
+
+      // 1. Вращение платформ (в разные стороны на четных/нечетных слоях)
+      const rotSpeed = ROTATION_SPEED_BASE + level * 0.0006;
+      platforms.forEach((p, idx) => {
+        if (p) {
+          const dir = (idx % 2 === 0) ? 1 : -1;
+          p.rotation.y += rotSpeed * dir;
+        }
+      });
+
+      // 2. Логика движения мяча
+      if (gameState === STATE_PLAYING) {
+        if (isHolding) {
+          // Игрок удерживает нажатие: ускоренное движение вниз (пробитие)
+          velocityY = SMASH_SPEED;
+          ball.position.y += velocityY;
+
+          // Проверяем пробитие платформ
+          while (nextPlatformToSmash < levelPlatformsCount + 1 && ball.position.y - BALL_RADIUS <= -nextPlatformToSmash * Y_GAP) {
+            smashPlatform(nextPlatformToSmash);
+            
+            // Если игрок разбился, прерываем цикл
+            if (gameState === STATE_GAMEOVER) break;
+
+            nextPlatformToSmash++;
+          }
+        } else {
+          // Обычное прыжковое движение под гравитацией
+          velocityY -= GRAVITY;
+          ball.position.y += velocityY;
+
+          // Затухание Fever полоски в пассивном режиме
+          feverMeter = Math.max(0, feverMeter - 8 * dt);
+          updateFeverBar();
+
+          // Столкновение при падении
+          if (velocityY < 0) {
+            const platformIdx = nextPlatformToSmash;
+            const platformY = -platformIdx * Y_GAP;
+
+            if (ball.position.y - BALL_RADIUS <= platformY) {
+              const platform = platforms[platformIdx];
+              if (platform) {
+                const { isDanger, isBottom } = checkCollision(platform);
+
+                if (!isDanger && !isBottom) {
+                  gameOver();
+                } else if (isBottom) {
+                  winGame();
+                } else {
+                  // Пружинящий отскок (происходит на черном секторе!)
+                  ball.position.y = platformY + BALL_RADIUS;
+                  velocityY = BOUNCE_FORCE;
+                  playBounceSound();
+                }
+              }
+            }
+          }
+        }
+
+        // Логика таймера Fever
+        if (isFeverMode) {
+          feverTimer -= dt;
+          feverMeter = (feverTimer / 3.5) * 100;
+          updateFeverBar();
+          
+          if (feverTimer <= 0) {
+            deactivateFeverMode();
+          }
+        }
+      } else if (gameState === STATE_START || gameState === STATE_WIN) {
+        // Мяч лениво пружинит на верхней платформе на старте/финише
+        velocityY -= GRAVITY;
+        ball.position.y += velocityY;
+        
+        const platformY = gameState === STATE_START ? 0 : -levelPlatformsCount * Y_GAP;
+        if (velocityY < 0 && ball.position.y - BALL_RADIUS <= platformY) {
+          ball.position.y = platformY + BALL_RADIUS;
+          velocityY = BOUNCE_FORCE * 0.9;
+          playBounceSound();
+        }
+      }
+
+      // 3. Плавное следование камеры за мячом
+      const targetCamY = ball.position.y + 3.8;
+      camera.position.y += (targetCamY - camera.position.y) * 0.11;
+      
+      // Направление прожектора следует за мячом для красивых теней
+      dirLight.position.y = ball.position.y + 15;
+      dirLight.target = ball;
+
+      // 4. Обновление осколков
+      updateDebris(dt);
+
+      // 5. Рендеринг сцены
+      renderer.render(scene, camera);
+    }
+
+    // --- Обработчики нажатий и событий ---
+    function setupControls() {
+      const onActionStart = (e) => {
+        if (e.target.tagName === 'BUTTON') return; // игнорируем нажатия кнопок UI
+        
+        initAudio();
+        
+        if (gameState === STATE_PLAYING) {
+          isHolding = true;
+        } else if (gameState === STATE_START) {
+          restartLevel(false);
+        }
+      };
+
+      const onActionEnd = () => {
+        isHolding = false;
+      };
+
+      // Слушатели для мыши
+      window.addEventListener('mousedown', onActionStart);
+      window.addEventListener('mouseup', onActionEnd);
+
+      // Слушатели для тачскринов (мобилки)
+      window.addEventListener('touchstart', onActionStart, { passive: false });
+      window.addEventListener('touchend', onActionEnd);
+
+      // События кнопок UI
+      document.getElementById('btn-start').addEventListener('click', () => {
+        restartLevel(false);
+      });
+
+      document.getElementById('btn-retry').addEventListener('click', () => {
+        restartLevel(false);
+      });
+
+      document.getElementById('btn-next').addEventListener('click', () => {
+        restartLevel(true);
+      });
+    }
+
+    // --- Инициализация и запуск игры ---
+    initEngine();
+    buildLevel();
+    setupControls();
+    
+    // Запускаем рендер-цикл
+    lastTime = performance.now();
+    animate();
+  </script>
+</body>
+</html>
